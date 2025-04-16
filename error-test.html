@@ -1,0 +1,95 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Error Reporter Test</title>
+  <style>
+    body { font-family: Arial, sans-serif; margin: 20px; }
+    button { margin: 5px; padding: 10px 20px; font-size: 16px; }
+    img { margin-top: 20px; }
+  </style>
+</head>
+<body>
+  <h1>Error Reporter Test</h1>
+  <button onclick="triggerSyncError()">Trigger Synchronous Error</button>
+  <button onclick="triggerPromiseError()">Trigger Promise Error</button>
+  <button onclick="triggerAsyncError()">Trigger Async Error (setTimeout)</button>
+  <button onclick="triggerResourceError()">Trigger Resource Load Error</button>
+  
+  <!-- Intentionally broken image for Resource Error -->
+  <img id="error-image" src="non-existent-image.jpg" alt="Broken Image">
+
+  <script>
+    // Global error handler for uncaught errors
+    window.onerror = function (message, source, lineno, colno, error) {
+      const payload = {
+        errorMessage: message,
+        url: source,
+        line: lineno,
+        column: colno,
+        errorStack: error ? error.stack : null
+      };
+      console.log("📤 Sending error (onerror) to server:", payload);
+      sendError(payload);
+    };
+
+    // Global handler for unhandled promise rejections
+    window.onunhandledrejection = function(event) {
+      const error = event.reason;
+      const payload = {
+        errorMessage: error && error.message ? error.message : 'Unhandled rejection',
+        url: window.location.href,
+        line: 0,
+        column: 0,
+        errorStack: error && error.stack ? error.stack : null
+      };
+      console.log("📤 Sending unhandled rejection to server:", payload);
+      sendError(payload);
+    };
+
+    // Utility function to send error to the reporting server
+    function sendError(payload) {
+      fetch('http://localhost:3000/report-error', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      })
+      .then(res => {
+        if (!res.ok) {
+          throw new Error(`Server responded with status ${res.status}`);
+        }
+        return res.json();
+      })
+      .then(data => console.log("✅ Error reported:", data))
+      .catch(err => console.error("❌ Failed to report error:", err));
+    }
+
+    // Trigger a synchronous error by calling an undefined function
+    function triggerSyncError() {
+      undefinedFunctionCall();  // This function does not exist, triggering a ReferenceError
+    }
+
+    // Trigger an error by rejecting a promise without handling it
+    function triggerPromiseError() {
+      new Promise((resolve, reject) => {
+        reject(new Error("This is an unhandled promise rejection error"));
+      });
+    }
+
+    // Trigger an asynchronous error via setTimeout
+    function triggerAsyncError() {
+      setTimeout(() => {
+        // This error is thrown asynchronously and caught by window.onerror if not caught
+        throw new Error("Error thrown from setTimeout");
+      }, 100);
+    }
+
+    // Trigger a resource loading error by forcing the image to reload a non-existent resource
+    function triggerResourceError() {
+      const img = document.getElementById("error-image");
+      // Changing the src attribute will trigger the 'error' event again if the image fails to load
+      img.src = "non-existent-image-" + Date.now() + ".jpg";
+    }
+  </script>
+</body>
+</html>
